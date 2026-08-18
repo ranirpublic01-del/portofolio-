@@ -76,6 +76,53 @@
   .hero{
     padding: 4.5rem 0 2.5rem;
     position: relative;
+    overflow: hidden;
+  }
+
+  /* Ambient blob — gradasi lembut yang melayang pelan di latar hero.
+     Memberi kedalaman & rasa "hidup" tanpa mengganggu keterbacaan teks. */
+  .ambient-blob{
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.55;
+  }
+  .ambient-blob.b1{
+    width: 340px; height: 340px; top: -140px; right: -60px;
+    background: radial-gradient(circle, rgba(216,173,95,0.35), transparent 70%);
+    animation: float-a 14s ease-in-out infinite;
+  }
+  .ambient-blob.b2{
+    width: 280px; height: 280px; bottom: -120px; left: 10%;
+    background: radial-gradient(circle, rgba(95,208,217,0.28), transparent 70%);
+    animation: float-b 18s ease-in-out infinite;
+  }
+  @keyframes float-a{
+    0%, 100%{ transform: translate(0, 0) scale(1); }
+    50%{ transform: translate(-30px, 30px) scale(1.08); }
+  }
+  @keyframes float-b{
+    0%, 100%{ transform: translate(0, 0) scale(1); }
+    50%{ transform: translate(25px, -20px) scale(1.05); }
+  }
+  .hero > *{ position: relative; z-index: 1; }
+
+  @media (prefers-reduced-motion: reduce){
+    .ambient-blob{ animation: none; }
+  }
+
+  /* ---------------- REVEAL ON SCROLL ---------------- */
+  .reveal{
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+    transition-delay: var(--reveal-delay, 0s);
+  }
+  .reveal.in-view{ opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce){
+    .reveal{ opacity: 1; transform: none; transition: none; }
   }
   .eyebrow{
     font-family: 'IBM Plex Mono', monospace;
@@ -192,18 +239,29 @@
   }
 
   .legend-panel{ padding: 1.75rem; }
-  .legend-row{
+  .skill-bar-row{ padding: 0.7rem 0; }
+  .skill-bar-row:first-child{ padding-top: 0; }
+  .skill-bar-top{
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0.6rem 0; border-bottom: 1px dashed var(--ink-line);
-    font-size: 0.88rem;
+    margin-bottom: 0.4rem; font-size: 0.87rem;
   }
-  .legend-row:last-child{ border-bottom: none; }
-  .legend-row .dot{
-    width: 9px; height: 9px; border-radius: 50%;
-    display: inline-block; margin-right: 0.6rem; flex-shrink: 0;
+  .skill-bar-top .name{ display: flex; align-items: center; font-weight: 500; }
+  .skill-bar-top .rank{
+    font-family: 'IBM Plex Mono', monospace; font-size: 0.66rem; color: var(--text-dim);
+    margin-right: 0.5rem; width: 1.4rem; display: inline-block;
   }
-  .legend-row .name{ display: flex; align-items: center; font-weight: 500; }
-  .legend-row .val{ font-family: 'IBM Plex Mono', monospace; color: var(--text-muted); font-size: 0.8rem; }
+  .skill-bar-top .dot{
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 0.55rem; flex-shrink: 0;
+  }
+  .skill-bar-top .val{ font-family: 'IBM Plex Mono', monospace; color: var(--text-muted); font-size: 0.78rem; }
+  .skill-bar-track{
+    height: 7px; border-radius: 999px; background: var(--ink); border: 1px solid var(--ink-line);
+    overflow: hidden;
+  }
+  .skill-bar-fill{
+    height: 100%; width: 0%; border-radius: 999px;
+    transition: width 1.1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
 
   /* ---------------- FILTER TABS ---------------- */
   .filter-section{ padding-bottom: 1.8rem; }
@@ -223,12 +281,21 @@
     transition: all 0.2s ease;
     white-space: nowrap;
   }
-  .filter-tab:hover{ border-color: var(--gold); color: var(--text-primary); }
+  .filter-tab:hover{ border-color: var(--gold); color: var(--text-primary); transform: translateY(-1px); }
   .filter-tab.active{
     background: var(--tab-color, var(--gold));
     border-color: var(--tab-color, var(--gold));
     color: #10131b;
     font-weight: 600;
+    animation: tab-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes tab-pop{
+    0%{ transform: scale(0.94); }
+    60%{ transform: scale(1.03); }
+    100%{ transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .filter-tab.active{ animation: none; }
   }
 
   /* ---------------- KATALOG GRID ---------------- */
@@ -257,15 +324,18 @@
   }
   .proj-card .accent-bar{ height: 4px; width: 100%; background: var(--card-accent, var(--gold)); }
   .proj-card .img-frame{
-    position: relative; aspect-ratio: 16/10; overflow: hidden;
-    background: #0d0f16; border-bottom: 1px solid var(--ink-line);
+    position: relative; height: 230px; overflow: hidden;
+    background:
+      repeating-linear-gradient(45deg, #0d0f16 0px, #0d0f16 2px, #101420 2px, #101420 20px);
+    border-bottom: 1px solid var(--ink-line);
+    display: flex; align-items: center; justify-content: center;
   }
   .proj-card .img-frame img{
-    width: 100%; height: 100%; object-fit: cover; display: block;
-    filter: saturate(0.95) contrast(1.02);
+    width: 100%; height: 100%; object-fit: contain; display: block;
+    filter: saturate(0.97) contrast(1.02);
     transition: transform 0.45s ease;
   }
-  .proj-card:hover .img-frame img{ transform: scale(1.06); }
+  .proj-card:hover .img-frame img{ transform: scale(1.045); }
   .proj-card .plate-no{
     position: absolute; top: 0.6rem; left: 0.6rem;
     font-family: 'IBM Plex Mono', monospace; font-size: 0.66rem;
@@ -347,6 +417,8 @@
 
   <!-- ================= HERO ================= -->
   <header class="hero">
+    <div class="ambient-blob b1"></div>
+    <div class="ambient-blob b2"></div>
     <div class="eyebrow">Indeks Lintas-Disiplin</div>
     <h1>Saya seorang <span class="cycle-word mono" id="cycleWord" style="font-family:'Fraunces',serif;">Fisikawan</span>.</h1>
     <p class="lead-text">
@@ -387,7 +459,7 @@
     <section class="stats-section">
       <div class="row g-4">
         <div class="col-lg-5">
-          <div class="panel chart-panel h-100 d-flex flex-column justify-content-center">
+          <div class="panel chart-panel h-100 d-flex flex-column justify-content-center reveal">
             <div class="panel-label">// Proporsi Disiplin</div>
             <div class="chart-wrap">
               <canvas id="jenisChart"></canvas>
@@ -399,8 +471,8 @@
           </div>
         </div>
         <div class="col-lg-7">
-          <div class="panel legend-panel h-100">
-            <div class="panel-label">// Rincian per Disiplin</div>
+          <div class="panel legend-panel h-100 reveal" style="--reveal-delay:0.12s">
+            <div class="panel-label">// Kecondongan Skill — diurutkan dari yang paling banyak dikerjakan</div>
             <div id="legendList"></div>
           </div>
         </div>
@@ -408,13 +480,13 @@
     </section>
 
     <!-- ---------- Filter Tabs ---------- -->
-    <section class="filter-section">
+    <section class="filter-section reveal">
       <div class="filter-scroll" id="filterTabs"><!-- diisi oleh JS --></div>
     </section>
 
     <!-- ---------- Grid Katalog ---------- -->
     <section class="portfolio-section">
-      <div class="section-title-row">
+      <div class="section-title-row reveal">
         <h2>Katalog Karya</h2>
         <span class="count-tag" id="gridCountTag">// 0 entri</span>
       </div>
@@ -578,6 +650,8 @@ async function fetchSheetData() {
     errorEl.style.display = "none";
     mainEl.style.display = "block";
 
+    observeReveals(mainEl);
+
   } catch (err) {
     clearTimeout(timeoutId);
     console.error("Gagal mengambil/parsing data Sheets:", err);
@@ -684,7 +758,8 @@ function renderChart(projects) {
   const data = Object.values(counts);
   const colors = labels.map((l) => categoryColorMap[l]);
 
-  document.getElementById("totalProjectCount").textContent = projects.length;
+  document.getElementById("totalProjectCount").textContent = "0";
+  animateCountUp(document.getElementById("totalProjectCount"), projects.length, 900);
 
   const ctx = document.getElementById("jenisChart").getContext("2d");
   if (jenisChartInstance) jenisChartInstance.destroy();
@@ -703,21 +778,73 @@ function renderChart(projects) {
   });
 }
 
-/* ---------------------- LEGENDA ---------------------- */
+/* ---------------------- KECONDONGAN SKILL (bar animasi, diurutkan) ---------------------- */
 function renderLegend(projects) {
   const counts = countByJenis(projects);
   const total = projects.length;
   const container = document.getElementById("legendList");
 
-  container.innerHTML = Object.keys(counts).map((jenis) => {
+  // Urutkan dari yang paling banyak dikerjakan -> langsung menjawab
+  // "skill saya condong ke mana" secara visual, bukan cuma daftar datar.
+  const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+
+  container.innerHTML = sorted.map((jenis, idx) => {
     const value = counts[jenis];
     const pct = ((value / total) * 100).toFixed(1);
     return `
-      <div class="legend-row">
-        <span class="name"><span class="dot" style="background:${categoryColorMap[jenis]}"></span>${escapeHtml(jenis)}</span>
-        <span class="val">${value} karya · ${pct}%</span>
+      <div class="skill-bar-row">
+        <div class="skill-bar-top">
+          <span class="name">
+            <span class="rank mono">#${idx + 1}</span>
+            <span class="dot" style="background:${categoryColorMap[jenis]}"></span>${escapeHtml(jenis)}
+          </span>
+          <span class="val">${value} karya · ${pct}%</span>
+        </div>
+        <div class="skill-bar-track">
+          <div class="skill-bar-fill" data-target="${pct}" style="background:${categoryColorMap[jenis]};"></div>
+        </div>
       </div>`;
   }).join("");
+
+  // Trigger animasi width: mulai dari 0%, lalu di frame berikutnya set ke
+  // nilai target supaya transisi CSS benar-benar berjalan (bukan langsung diam di posisi akhir).
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      container.querySelectorAll(".skill-bar-fill").forEach((el) => {
+        el.style.width = el.dataset.target + "%";
+      });
+    });
+  });
+}
+
+/** Animasi hitung naik untuk angka statistik (mis. Total Karya). */
+function animateCountUp(el, target, duration) {
+  if (prefersReducedMotion) { el.textContent = target; return; }
+  const start = performance.now();
+  function tick(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+    el.textContent = Math.round(eased * target);
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ---------------------- REVEAL-ON-SCROLL ---------------------- */
+let revealObserver = null;
+function observeReveals(root = document) {
+  if (prefersReducedMotion) return; // elemen sudah terlihat penuh lewat CSS fallback
+  if (!revealObserver) {
+    revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("in-view");
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
+  }
+  root.querySelectorAll(".reveal:not(.in-view)").forEach((el) => revealObserver.observe(el));
 }
 
 /* ---------------------- TAB FILTER DISIPLIN ---------------------- */
@@ -739,6 +866,7 @@ function renderFilterTabs(projects) {
       btn.classList.add("active");
       currentFilter = btn.dataset.jenis;
       renderGrid(allProjects, currentFilter);
+      observeReveals(document.getElementById("portfolioGrid"));
     });
   });
 }
@@ -759,8 +887,9 @@ function renderGrid(projects, filter) {
     const hasLink = p.linkUrl !== "";
     const accent = categoryColorMap[p.jenis] || "#d8ad5f";
     const plateNo = p.no ? String(p.no).padStart(3, "0") : String(idx + 1).padStart(3, "0");
+    const delay = Math.min(idx * 0.06, 0.4);
     return `
-      <div class="col-md-6 col-lg-4">
+      <div class="col-md-6 col-lg-4 reveal" style="--reveal-delay:${delay}s">
         <div class="proj-card" style="--card-accent:${accent}">
           <div class="accent-bar"></div>
           <div class="img-frame">

@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Log Instrumentasi — Portofolio Fisika Instrumentasi &amp; IoT</title>
+
+<!-- Bootstrap 5 (grid, responsive utilities, cards) -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<!-- Chart.js untuk diagram donat -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<!-- Font: Space Grotesk (display/heading), IBM Plex Mono (data/label), Inter (body) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* ============================================================
+     TOKEN DESAIN — tema "Logbook Instrumentasi"
+     Terinspirasi dari layar osiloskop gelap dengan garis grid,
+     jejak (trace) berwarna amber/teal, dan label serial monospace
+     seperti yang biasa ditemukan pada panel alat lab.
+     ============================================================ */
+  :root{
+    --bg: #0c1211;
+    --bg-panel: #121a19;
+    --bg-panel-2: #0f1615;
+    --scope-screen: #0a1211;
+    --grid-line: rgba(79, 216, 196, 0.08);
+    --border: #223230;
+    --border-soft: #1b2726;
+    --amber: #ffb020;
+    --teal: #4fd8c4;
+    --text-primary: #eef2ef;
+    --text-muted: #8ca39c;
+    --text-dim: #5c6e69;
+    --danger: #ff6b5e;
+    --radius: 2px;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 34px 34px;
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, .display-font{
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  .mono{ font-family: 'IBM Plex Mono', monospace; }
+
+  ::selection{ background: var(--amber); color: #10140f; }
+
+  /* ---------- Header / Hero ---------- */
+  .hero{
+    border-bottom: 1px solid var(--border);
+    padding: 3.5rem 0 2.5rem;
+    position: relative;
+  }
+  .eyebrow{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--teal);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .eyebrow::before{
+    content: "";
+    width: 8px; height: 8px;
+    background: var(--teal);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--teal);
+    animation: pulse-dot 2.2s infinite ease-in-out;
+  }
+  @keyframes pulse-dot{
+    0%, 100%{ opacity: 1; }
+    50%{ opacity: 0.25; }
+  }
+  .hero h1{
+    font-size: clamp(2.1rem, 4.5vw, 3.4rem);
+    font-weight: 700;
+    margin: 0.6rem 0 0.8rem;
+    color: var(--text-primary);
+  }
+  .hero p.lead-text{
+    color: var(--text-muted);
+    max-width: 620px;
+    font-size: 1.02rem;
+  }
+
+  /* ---------- Panel dasar (gaya bezel alat) ---------- */
+  .panel{
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    position: relative;
+  }
+  .panel::before{
+    /* sudut siku ala label instrumen */
+    content: "";
+    position: absolute;
+    top: -1px; left: -1px;
+    width: 14px; height: 14px;
+    border-top: 2px solid var(--amber);
+    border-left: 2px solid var(--amber);
+  }
+  .panel::after{
+    content: "";
+    position: absolute;
+    bottom: -1px; right: -1px;
+    width: 14px; height: 14px;
+    border-bottom: 2px solid var(--amber);
+    border-right: 2px solid var(--amber);
+  }
+
+  /* ---------- Statistik / Diagram Donat ---------- */
+  .stats-section{ padding: 2.5rem 0; }
+  .scope-panel{
+    background: var(--scope-screen);
+    padding: 1.75rem;
+  }
+  .scope-panel .panel-label{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 1rem;
+  }
+  .chart-wrap{
+    position: relative;
+    max-width: 260px;
+    margin: 0 auto;
+  }
+  .chart-center-readout{
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+  }
+  .chart-center-readout .num{
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2.1rem;
+    font-weight: 700;
+    color: var(--amber);
+    line-height: 1;
+  }
+  .chart-center-readout .lbl{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 0.25rem;
+  }
+
+  .legend-panel{ padding: 1.75rem; }
+  .legend-row{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 0;
+    border-bottom: 1px dashed var(--border-soft);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+  }
+  .legend-row:last-child{ border-bottom: none; }
+  .legend-row .dot{
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 0.6rem;
+  }
+  .legend-row .name{ color: var(--text-primary); display:flex; align-items:center; }
+  .legend-row .val{ color: var(--text-muted); }
+
+  /* ---------- Grid Portofolio ---------- */
+  .portfolio-section{ padding: 1rem 0 4rem; }
+  .section-title-row{
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1.75rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.9rem;
+  }
+  .section-title-row h2{
+    font-size: 1.4rem;
+    margin: 0;
+  }
+  .section-title-row .count-tag{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+
+  .proj-card{
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.25s ease, transform 0.25s ease;
+  }
+  .proj-card:hover{
+    border-color: var(--teal);
+    transform: translateY(-3px);
+  }
+  .proj-card .img-frame{
+    position: relative;
+    aspect-ratio: 16/10;
+    overflow: hidden;
+    background: var(--bg-panel-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .proj-card .img-frame img{
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: saturate(0.92) contrast(1.03);
+    transition: transform 0.4s ease;
+  }
+  .proj-card:hover .img-frame img{ transform: scale(1.05); }
+
+  .proj-card .serial-no{
+    position: absolute;
+    top: 0.6rem; left: 0.6rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    background: rgba(10, 18, 17, 0.8);
+    color: var(--teal);
+    padding: 0.15rem 0.5rem;
+    border: 1px solid var(--border);
+    letter-spacing: 0.05em;
+  }
+
+  .proj-card .card-body-custom{
+    padding: 1.15rem 1.25rem 1.35rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+  .badge-jenis{
+    align-self: flex-start;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.28rem 0.55rem;
+    border: 1px solid var(--teal);
+    color: var(--teal);
+    border-radius: var(--radius);
+    margin-bottom: 0.7rem;
+  }
+  .proj-card h3{
+    font-size: 1.08rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+  }
+  .proj-card p.desc{
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    flex: 1;
+    margin-bottom: 1rem;
+  }
+  .btn-scope{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    color: var(--amber);
+    background: transparent;
+    border: 1px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.9rem;
+    text-align: center;
+    text-decoration: none;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .btn-scope:hover{
+    background: var(--amber);
+    color: #10140f;
+  }
+  .btn-scope.disabled{
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  /* ---------- Loading & Error ---------- */
+  #loadingState{
+    padding: 5rem 0;
+    text-align: center;
+  }
+  .loader-ring{
+    width: 46px; height: 46px;
+    margin: 0 auto 1.2rem;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--teal);
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+  #loadingState p{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  #errorState{
+    display: none;
+    padding: 1.5rem 1.75rem;
+    background: rgba(255, 107, 94, 0.06);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    color: #ffb3ab;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+  }
+  #errorState .err-title{
+    color: var(--danger);
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.75rem;
+  }
+
+  footer.site-footer{
+    border-top: 1px solid var(--border);
+    padding: 1.5rem 0;
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+
+  .container-narrow{ max-width: 1180px; }
+</style>
+</head>
+<body>
+
+<div class="container container-narrow">
+
+  <!-- ================= HERO ================= -->
+  <header class="hero">
+    <div class="eyebrow">Status: Terhubung ke Google Sheets</div>
+    <h1>Logbook Instrumentasi &amp; IoT</h1>
+    <p class="lead-text">
+      Kumpulan proyek Fisika Instrumentasi — mulai dari perangkat pengukuran berbasis
+      mikrokontroler hingga sistem manajemen instrumen laboratorium. Data pada halaman ini
+      ditarik langsung secara <em>real-time</em> dari Google Sheets, tanpa server backend.
+    </p>
+  </header>
+
+  <!-- ================= LOADING STATE ================= -->
+  <div id="loadingState">
+    <div class="loader-ring"></div>
+    <p>Menarik data dari spreadsheet…</p>
+  </div>
+
+  <!-- ================= ERROR STATE ================= -->
+  <div id="errorState">
+    <div class="err-title">Gagal memuat data</div>
+    <div id="errorMessage">Terjadi kesalahan saat mengambil data dari Google Sheets.</div>
+  </div>
+
+  <!-- ================= KONTEN UTAMA (disembunyikan sampai data siap) ================= -->
+  <div id="mainContent" style="display:none;">
+
+    <!-- ---------- Statistik: Diagram Donat ---------- -->
+    <section class="stats-section">
+      <div class="row g-4">
+        <div class="col-lg-5">
+          <div class="panel scope-panel h-100 d-flex flex-column justify-content-center">
+            <div class="panel-label">// Distribusi Jenis Proyek</div>
+            <div class="chart-wrap">
+              <canvas id="jenisChart"></canvas>
+              <div class="chart-center-readout">
+                <div class="num" id="totalProjectCount">0</div>
+                <div class="lbl">Total Proyek</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-7">
+          <div class="panel legend-panel h-100">
+            <div class="panel-label">// Rincian Kategori</div>
+            <div id="legendList"><!-- Diisi oleh JS --></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- Grid Portofolio ---------- -->
+    <section class="portfolio-section">
+      <div class="section-title-row">
+        <h2>Daftar Proyek</h2>
+        <span class="count-tag" id="gridCountTag">// 0 entri</span>
+      </div>
+      <div class="row g-4" id="portfolioGrid">
+        <!-- Card proyek diisi oleh JS -->
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="site-footer">
+    DATA SOURCE: GOOGLE SHEETS · RENDERED CLIENT-SIDE · NO BACKEND
+  </footer>
+
+</div>
+
+<script>
+/* =====================================================================
+   KONFIGURASI SUMBER DATA
+   =====================================================================
+   Tempelkan ID Spreadsheet Anda di bawah ini. ID ini adalah string
+   panjang yang ada di URL Google Sheets, contoh:
+   https://docs.google.com/spreadsheets/d/>>>ID_ADA_DI_SINI<<</edit
+
+   Untuk contoh URL yang Anda berikan:
+   https://docs.google.com/spreadsheets/d/1eQ6LEZolQdlE9lreuGWX78tHs_Rlx1vAlalfH0quaeU/edit
+   maka ID-nya adalah: 1eQ6LEZolQdlE9lreuGWX78tHs_Rlx1vAlalfH0quaeU
+
+   PENTING: Sheet harus di-share dengan akses "Anyone with the link
+   can view" agar endpoint gviz bisa diakses tanpa login.
+   ===================================================================== */
+const SPREADSHEET_ID = "1eQ6LEZolQdlE9lreuGWX78tHs_Rlx1vAlalfH0quaeU"; // <-- GANTI DENGAN ID SPREADSHEET ANDA
+
+// Opsional: jika data ada di sheet/tab tertentu (bukan sheet pertama),
+// isi nama sheet-nya di sini. Kosongkan ("") jika ingin memakai sheet pertama.
+const SHEET_NAME = ""; // contoh: "Portofolio"
+
+// Endpoint Google Visualization API (gviz) — mengembalikan data sebagai
+// pseudo-JSON tanpa perlu API key maupun backend tambahan.
+const GVIZ_URL = SHEET_NAME
+  ? `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`
+  : `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json`;
+
+/* =====================================================================
+   DUMMY DATA (referensi struktur kolom — sesuai bentuk asli di Sheets)
+   =====================================================================
+   No | Nama Project | Jenis Project | Deskripsi | Pendukung 1 (gambar) | Pendukung 2 (link)
+   ---|--------------|---------------|-----------|-----------------------|--------------------
+   1  | Resistivity Meter IoT (ESP32)      | Hardware | Alat ukur resistivitas tanah metode 4-titik      | uc?export=view&id=XXXX | github.com/.../resistivity-meter
+   2  | Sistem Monitoring Suhu Lab Otomatis| IoT      | Logger suhu & kelembapan ruang lab via MQTT       | uc?export=view&id=XXXX | github.com/.../lab-monitor
+   3  | Aplikasi Manajemen Alat Laboratorium| Software| Sistem peminjaman & inventaris instrumen lab      | uc?export=view&id=XXXX | github.com/.../inventory-app
+   4  | Studi Karakteristik Sensor LDR      | Riset   | Kajian linearitas sensor LDR terhadap intensitas  | uc?export=view&id=XXXX | drive.google.com/.../laporan.pdf
+   Baris 1 (header) diabaikan; parsing dimulai dari baris ke-2.
+   ===================================================================== */
+
+// Palet warna untuk badge/legenda/chart, dipetakan berdasarkan nama jenis
+// proyek (di-hash sederhana agar konsisten walau urutan kategori berubah).
+const CHART_PALETTE = ["#4fd8c4", "#ffb020", "#8b7bd8", "#ff6b5e", "#6fb1ff", "#c9e26b"];
+
+let jenisChartInstance = null;
+
+/**
+ * Mengambil & memparsing data dari Google Sheets via Visualization API.
+ */
+async function fetchSheetData() {
+  const loadingEl = document.getElementById("loadingState");
+  const errorEl = document.getElementById("errorState");
+  const mainEl = document.getElementById("mainContent");
+
+  try {
+    const response = await fetch(GVIZ_URL);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} — periksa apakah Spreadsheet ID benar dan sheet sudah dibagikan publik ("Anyone with the link").`);
+    }
+
+    // Respons gviz BUKAN JSON murni. Bentuknya seperti:
+    // google.visualization.Query.setResponse({ ...json... });
+    // Sehingga kita perlu memotong pembungkus fungsi tersebut sebelum
+    // JSON.parse() dijalankan.
+    const rawText = await response.text();
+
+    const jsonStart = rawText.indexOf("{");
+    const jsonEnd = rawText.lastIndexOf("}");
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new Error("Format respons tidak dikenali. Pastikan URL gviz benar.");
+    }
+    const jsonString = rawText.substring(jsonStart, jsonEnd + 1);
+    const parsed = JSON.parse(jsonString);
+
+    // Struktur hasil parse: parsed.table.rows[i].c[j].v
+    // rows[i] = satu baris data, c[j] = satu kolom (bisa null jika sel kosong).
+    const rows = parsed.table.rows || [];
+
+    // Ubah setiap baris mentah menjadi objek proyek yang rapi.
+    // Baris header TIDAK ikut di sini karena gviz dengan tqx=out:json
+    // sudah otomatis memakai baris pertama sebagai definisi kolom (cols),
+    // sehingga "rows" yang dikembalikan sudah mulai dari baris data ke-2
+    // pada spreadsheet aslinya.
+    const projects = rows.map((row) => {
+      const cells = row.c || [];
+      const getCell = (idx) => (cells[idx] && cells[idx].v !== null && cells[idx].v !== undefined)
+        ? String(cells[idx].v).trim()
+        : "";
+
+      return {
+        no: getCell(0),                 // Kolom A: No
+        nama: getCell(1),                // Kolom B: Nama Project
+        jenis: getCell(2) || "Lainnya",  // Kolom C: Jenis Project
+        deskripsi: getCell(3),           // Kolom D: Deskripsi
+        gambarUrl: normalizeDriveImageUrl(getCell(4)), // Kolom E: Pendukung 1
+        linkUrl: normalizeExternalUrl(getCell(5)),     // Kolom F: Pendukung 2
+      };
+    }).filter((p) => p.nama !== ""); // buang baris kosong
+
+    if (projects.length === 0) {
+      throw new Error("Data ditemukan tetapi tidak ada baris proyek yang valid (kolom Nama Project kosong).");
+    }
+
+    renderChart(projects);
+    renderLegend(projects);
+    renderGrid(projects);
+
+    loadingEl.style.display = "none";
+    errorEl.style.display = "none";
+    mainEl.style.display = "block";
+
+  } catch (err) {
+    console.error("Gagal mengambil/parsing data Sheets:", err);
+    loadingEl.style.display = "none";
+    mainEl.style.display = "none";
+    errorEl.style.display = "block";
+    document.getElementById("errorMessage").textContent = err.message || "Terjadi kesalahan tidak diketahui.";
+  }
+}
+
+/**
+ * Memastikan URL gambar Google Drive dalam format direct-link yang
+ * bisa dirender langsung oleh tag <img>. Jika kolom sudah kosong,
+ * kembalikan placeholder.
+ */
+function normalizeDriveImageUrl(rawValue) {
+  if (!rawValue) {
+    return "https://placehold.co/600x400/121a19/4fd8c4?text=No+Image&font=roboto-mono";
+  }
+  // Jika user menempel hanya ID Drive, atau path parsial "uc?export=view&id=...",
+  // tetap dilengkapi menjadi URL penuh.
+  if (rawValue.startsWith("http")) return rawValue;
+  if (rawValue.startsWith("uc?")) return `https://drive.google.com/${rawValue}`;
+  return `https://drive.google.com/uc?export=view&id=${rawValue}`;
+}
+
+/**
+ * Memastikan URL tautan luar (Pendukung 2) memiliki skema http/https
+ * agar tombol "Lihat Dokumentasi" berfungsi dengan benar.
+ */
+function normalizeExternalUrl(rawValue) {
+  if (!rawValue) return "";
+  if (rawValue.startsWith("http://") || rawValue.startsWith("https://")) return rawValue;
+  return `https://${rawValue}`;
+}
+
+/** Memberi warna konsisten untuk setiap nama kategori. */
+function colorForCategory(name, index) {
+  return CHART_PALETTE[index % CHART_PALETTE.length];
+}
+
+/** Menghitung jumlah proyek per "Jenis Project". */
+function countByJenis(projects) {
+  const counts = {};
+  projects.forEach((p) => {
+    counts[p.jenis] = (counts[p.jenis] || 0) + 1;
+  });
+  return counts;
+}
+
+/** Merender diagram donat berdasarkan proporsi Jenis Project. */
+function renderChart(projects) {
+  const counts = countByJenis(projects);
+  const labels = Object.keys(counts);
+  const data = Object.values(counts);
+  const colors = labels.map((label, i) => colorForCategory(label, i));
+
+  document.getElementById("totalProjectCount").textContent = projects.length;
+
+  const ctx = document.getElementById("jenisChart").getContext("2d");
+  if (jenisChartInstance) jenisChartInstance.destroy();
+
+  jenisChartInstance = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: colors,
+        borderColor: "#0a1211",
+        borderWidth: 3,
+        hoverOffset: 6,
+      }],
+    },
+    options: {
+      responsive: true,
+      cutout: "72%",
+      plugins: {
+        legend: { display: false }, // legenda kustom dirender terpisah
+        tooltip: {
+          bodyFont: { family: "IBM Plex Mono" },
+          titleFont: { family: "IBM Plex Mono" },
+        },
+      },
+    },
+  });
+}
+
+/** Merender daftar legenda kategori beserta jumlah & persentase. */
+function renderLegend(projects) {
+  const counts = countByJenis(projects);
+  const labels = Object.keys(counts);
+  const total = projects.length;
+  const container = document.getElementById("legendList");
+
+  container.innerHTML = labels.map((label, i) => {
+    const value = counts[label];
+    const pct = ((value / total) * 100).toFixed(1);
+    const color = colorForCategory(label, i);
+    return `
+      <div class="legend-row">
+        <span class="name"><span class="dot" style="background:${color}"></span>${escapeHtml(label)}</span>
+        <span class="val">${value} proyek · ${pct}%</span>
+      </div>
+    `;
+  }).join("");
+}
+
+/** Merender grid card portofolio. */
+function renderGrid(projects) {
+  const grid = document.getElementById("portfolioGrid");
+  document.getElementById("gridCountTag").textContent = `// ${projects.length} entri`;
+
+  grid.innerHTML = projects.map((p) => {
+    const hasLink = p.linkUrl !== "";
+    return `
+      <div class="col-md-6 col-lg-4">
+        <div class="proj-card">
+          <div class="img-frame">
+            <span class="serial-no">NO. ${escapeHtml(p.no || "-")}</span>
+            <img src="${escapeHtml(p.gambarUrl)}" alt="${escapeHtml(p.nama)}"
+                 onerror="this.src='https://placehold.co/600x400/121a19/4fd8c4?text=Gambar+Tidak+Tersedia&font=roboto-mono'">
+          </div>
+          <div class="card-body-custom">
+            <span class="badge-jenis">${escapeHtml(p.jenis)}</span>
+            <h3>${escapeHtml(p.nama)}</h3>
+            <p class="desc">${escapeHtml(p.deskripsi)}</p>
+            <a class="btn-scope ${hasLink ? "" : "disabled"}"
+               href="${hasLink ? escapeHtml(p.linkUrl) : "#"}"
+               target="_blank" rel="noopener noreferrer">
+              ${hasLink ? "Lihat Dokumentasi →" : "Tautan tidak tersedia"}
+            </a>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+/** Utilitas kecil agar konten dari Sheets tidak merusak HTML (XSS-safe). */
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// Mulai proses fetch begitu halaman dimuat.
+document.addEventListener("DOMContentLoaded", fetchSheetData);
+</script>
+
+</body>
+</html>

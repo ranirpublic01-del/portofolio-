@@ -557,6 +557,7 @@ async function fetchSheetData() {
         jenis: getCell(2) || "Lainnya",
         deskripsi: getCell(3),
         gambarUrl: normalizeDriveImageUrl(getCell(4)),
+        gambarFallback: driveFallbackUrl(getCell(4)),
         linkUrl: normalizeExternalUrl(getCell(5)),
       };
     }).filter((p) => p.nama !== "");
@@ -597,11 +598,47 @@ async function fetchSheetData() {
   }
 }
 
+/**
+ * Mengekstrak File ID Google Drive dari berbagai kemungkinan format input:
+ * - ID polos: "1kXgOkGD-K8XFJsij7WGHIniSnpWQhPsr"
+ * - "uc?export=view&id=1kXgOkGD-K8XFJsij7WGHIniSnpWQhPsr"
+ * - URL lengkap "https://drive.google.com/uc?export=view&id=..."
+ * - URL "https://drive.google.com/file/d/ID/view?usp=sharing"
+ */
+function extractDriveFileId(rawValue) {
+  if (!rawValue) return "";
+  const idParamMatch = rawValue.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (idParamMatch) return idParamMatch[1];
+  const pathMatch = rawValue.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+  if (pathMatch) return pathMatch[1];
+  const bareIdMatch = rawValue.match(/^[a-zA-Z0-9_-]{10,}$/);
+  if (bareIdMatch) return bareIdMatch[0];
+  return "";
+}
+
+/**
+ * Google sering memblokir hotlink format lama ("uc?export=view&id=...")
+ * sehingga gambar gagal tampil walau sudah publik. Endpoint "thumbnail"
+ * jauh lebih stabil untuk ditampilkan langsung lewat tag <img>.
+ * Jika bukan link Drive sama sekali (mis. Unsplash dsb), URL asli dipakai apa adanya.
+ */
 function normalizeDriveImageUrl(rawValue) {
-  if (!rawValue) return "https://placehold.co/600x400/191d29/5fd0d9?text=No+Image&font=roboto-mono";
-  if (rawValue.startsWith("http")) return rawValue;
-  if (rawValue.startsWith("uc?")) return `https://drive.google.com/${rawValue}`;
-  return `https://drive.google.com/uc?export=view&id=${rawValue}`;
+  const placeholder = "https://placehold.co/600x400/191d29/5fd0d9?text=No+Image&font=roboto-mono";
+  if (!rawValue) return placeholder;
+
+  const isDriveLink = rawValue.includes("drive.google.com") || /^[a-zA-Z0-9_-]{10,}$/.test(rawValue);
+  if (!isDriveLink) return rawValue; // bukan link Drive, biarkan apa adanya (mis. Imgur, Unsplash)
+
+  const fileId = extractDriveFileId(rawValue);
+  if (!fileId) return placeholder;
+
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+}
+
+/** URL cadangan jika endpoint thumbnail gagal dimuat. */
+function driveFallbackUrl(rawValue) {
+  const fileId = extractDriveFileId(rawValue);
+  return fileId ? `https://lh3.googleusercontent.com/d/${fileId}=w1000` : "";
 }
 
 function normalizeExternalUrl(rawValue) {
@@ -729,7 +766,8 @@ function renderGrid(projects, filter) {
           <div class="img-frame">
             <span class="plate-no">PLATE No.${plateNo}</span>
             <img src="${escapeHtml(p.gambarUrl)}" alt="${escapeHtml(p.nama)}"
-                 onerror="this.src='https://placehold.co/600x400/191d29/5fd0d9?text=Gambar+Tidak+Tersedia&font=roboto-mono'">
+                 data-fallback="${escapeHtml(p.gambarFallback)}"
+                 onerror="handleImageError(this)">
           </div>
           <div class="card-body-custom">
             <span class="badge-jenis">${escapeHtml(p.jenis)}</span>
@@ -743,6 +781,24 @@ function renderGrid(projects, filter) {
         </div>
       </div>`;
   }).join("");
+}
+
+/**
+ * Dipanggil saat gambar utama (endpoint thumbnail Drive) gagal dimuat.
+ * Urutan percobaan: 1) URL cadangan (lh3.googleusercontent.com) → 2) placeholder.
+ * Pakai data-attribute + counter kecil supaya tidak terjadi onerror berulang tanpa henti.
+ */
+function handleImageError(imgEl) {
+  const stage = imgEl.dataset.errorStage || "0";
+  const fallback = imgEl.dataset.fallback;
+
+  if (stage === "0" && fallback) {
+    imgEl.dataset.errorStage = "1";
+    imgEl.src = fallback;
+  } else {
+    imgEl.onerror = null; // hentikan loop error setelah placeholder pun gagal
+    imgEl.src = "https://placehold.co/600x400/191d29/5fd0d9?text=Gambar+Tidak+Tersedia&font=roboto-mono";
+  }
 }
 
 function escapeHtml(str) {

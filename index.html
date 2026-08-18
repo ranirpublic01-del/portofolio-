@@ -510,240 +510,142 @@ async function fetchSheetData() {
   const errorEl = document.getElementById("errorState");
   const mainEl = document.getElementById("mainContent");
 
+  // Pengaman: jika karena alasan apa pun fetch tidak pernah selesai
+  // (mis. terblokir CORS secara diam-diam di beberapa browser), paksa
+  // batalkan setelah 12 detik supaya UI tidak macet selamanya di loading.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+
   try {
-    const response = await fetch(GVIZ_URL);
+    const response = await fetch(GVIZ_URL, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status} — periksa apakah Spreadsheet ID benar dan sheet sudah dibagikan publik ("Anyone with the link").`);
+    }
+
+    const rawText = await response.text();
+
+    // Jika sheet BELUM dibagikan publik, Google tidak mengembalikan error
+    // JSON — ia mengembalikan halaman HTML login/akses ditolak. Deteksi
+    // ini secara eksplisit supaya pesan errornya jelas, bukan macet diam.
+    if (rawText.includes("accounts.google.com") || rawText.trim().startsWith("<")) {
+      throw new Error("Sheet tampaknya belum dibagikan secara publik. Buka Google Sheets → tombol Share → ubah akses menjadi \"Anyone with the link\" → Viewer.");
     }
 
     // Respons gviz bukan JSON murni — dibungkus:
-    // google.visualization.QueGoogle Sheets, tanpa server backend.
-    </p>
-  </header>
-
-  <!-- ================= LOADING STATE ================= -->
-  <div id="loadingState">
-    <div class="loader-ring"></div>
-    <p>Menarik data dari spreadsheet…</p>
-  </div>
-
-  <!-- ================= ERROR STATE ================= -->
-  <div id="errorState">
-    <div class="err-title">Gagal memuat data</div>
-    <div id="errorMessage">Terjadi kesalahan saat mengambil data dari Google Sheets.</div>
-  </div>
-
-  <!-- ================= KONTEN UTAMA (disembunyikan sampai data siap) ================= -->
-  <div id="mainContent" style="display:none;">
-
-    <!-- ---------- Statistik: Diagram Donat ---------- -->
-    <section class="stats-section">
-      <div class="row g-4">
-        <div class="col-lg-5">
-          <div class="panel scope-panel h-100 d-flex flex-column justify-content-center">
-            <div class="panel-label">// Distribusi Jenis Proyek</div>
-            <div class="chart-wrap">
-              <canvas id="jenisChart"></canvas>
-              <div class="chart-center-readout">
-                <div class="num" id="totalProjectCount">0</div>
-                <div class="lbl">Total Proyek</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="col-lg-7">
-          <div class="panel legend-panel h-100">
-            <div class="panel-label">// Rincian Kategori</div>
-            <div id="legendList"><!-- Diisi oleh JS --></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ---------- Grid Portofolio ---------- -->
-    <section class="portfolio-section">
-      <div class="section-title-row">
-        <h2>Daftar Proyek</h2>
-        <span class="count-tag" id="gridCountTag">// 0 entri</span>
-      </div>
-      <div class="row g-4" id="portfolioGrid">
-        <!-- Card proyek diisi oleh JS -->
-      </div>
-    </section>
-
-  </div>
-
-  <footer class="site-footer">
-    DATA SOURCE: GOOGLE SHEETS · RENDERED CLIENT-SIDE · NO BACKEND
-  </footer>
-
-</div>
-
-<script>
-/* =====================================================================
-   KONFIGURASI SUMBER DATA
-   =====================================================================
-   Tempelkan ID Spreadsheet Anda di bawah ini. ID ini adalah string
-   panjang yang ada di URL Google Sheets, contoh:
-   https://docs.google.com/spreadsheets/d/>>>ID_ADA_DI_SINI<<</edit
-
-   Untuk contoh URL yang Anda berikan:
-   https://docs.google.com/spreadsheets/d/1eQ6LEZolQdlE9lreuGWX78tHs_Rlx1vAlalfH0quaeU/edit
-   maka ID-nya adalah: 1eQ6LEZolQdlE9lreuGWX78tHs_Rlx1vAlalfH0quaeU
-
-   PENTING: Sheet harus di-share dengan akses "Anyone with the link
-   can view" agar endpoint gviz bisa diakses tanpa login.
-   ===================================================================== */
-const SPREADSHEET_ID = "1eQ6LEZolQdlE9lreuGWX78tHs_Rlx1vAlalfH0quaeU"; // <-- GANTI DENGAN ID SPREADSHEET ANDA
-
-// Opsional: jika data ada di sheet/tab tertentu (bukan sheet pertama),
-// isi nama sheet-nya di sini. Kosongkan ("") jika ingin memakai sheet pertama.
-const SHEET_NAME = ""; // contoh: "Portofolio"
-
-// Endpoint Google Visualization API (gviz) — mengembalikan data sebagai
-// pseudo-JSON tanpa perlu API key maupun backend tambahan.
-const GVIZ_URL = SHEET_NAME
-  ? `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`
-  : `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json`;
-
-/* =====================================================================
-   DUMMY DATA (referensi struktur kolom — sesuai bentuk asli di Sheets)
-   =====================================================================
-   No | Nama Project | Jenis Project | Deskripsi | Pendukung 1 (gambar) | Pendukung 2 (link)
-   ---|--------------|---------------|-----------|-----------------------|--------------------
-   1  | Resistivity Meter IoT (ESP32)      | Hardware | Alat ukur resistivitas tanah metode 4-titik      | uc?export=view&id=XXXX | github.com/.../resistivity-meter
-   2  | Sistem Monitoring Suhu Lab Otomatis| IoT      | Logger suhu & kelembapan ruang lab via MQTT       | uc?export=view&id=XXXX | github.com/.../lab-monitor
-   3  | Aplikasi Manajemen Alat Laboratorium| Software| Sistem peminjaman & inventaris instrumen lab      | uc?export=view&id=XXXX | github.com/.../inventory-app
-   4  | Studi Karakteristik Sensor LDR      | Riset   | Kajian linearitas sensor LDR terhadap intensitas  | uc?export=view&id=XXXX | drive.google.com/.../laporan.pdf
-   Baris 1 (header) diabaikan; parsing dimulai dari baris ke-2.
-   ===================================================================== */
-
-// Palet warna untuk badge/legenda/chart, dipetakan berdasarkan nama jenis
-// proyek (di-hash sederhana agar konsisten walau urutan kategori berubah).
-const CHART_PALETTE = ["#4fd8c4", "#ffb020", "#8b7bd8", "#ff6b5e", "#6fb1ff", "#c9e26b"];
-
-let jenisChartInstance = null;
-
-/**
- * Mengambil & memparsing data dari Google Sheets via Visualization API.
- */
-async function fetchSheetData() {
-  const loadingEl = document.getElementById("loadingState");
-  const errorEl = document.getElementById("errorState");
-  const mainEl = document.getElementById("mainContent");
-
-  try {
-    const response = await fetch(GVIZ_URL);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} — periksa apakah Spreadsheet ID benar dan sheet sudah dibagikan publik ("Anyone with the link").`);
-    }
-
-    // Respons gviz BUKAN JSON murni. Bentuknya seperti:
     // google.visualization.Query.setResponse({ ...json... });
-    // Sehingga kita perlu memotong pembungkus fungsi tersebut sebelum
-    // JSON.parse() dijalankan.
-    const rawText = await response.text();
-
+    // Potong pembungkusnya sebelum JSON.parse().
     const jsonStart = rawText.indexOf("{");
     const jsonEnd = rawText.lastIndexOf("}");
     if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error("Format respons tidak dikenali. Pastikan URL gviz benar.");
+      throw new Error("Format respons tidak dikenali. Pastikan URL gviz benar dan sheet sudah dibagikan publik.");
     }
-    const jsonString = rawText.substring(jsonStart, jsonEnd + 1);
-    const parsed = JSON.parse(jsonString);
+    const parsed = JSON.parse(rawText.substring(jsonStart, jsonEnd + 1));
 
-    // Struktur hasil parse: parsed.table.rows[i].c[j].v
-    // rows[i] = satu baris data, c[j] = satu kolom (bisa null jika sel kosong).
+    // parsed.table.rows[i].c[j].v -> baris & kolom data.
     const rows = parsed.table.rows || [];
 
-    // Ubah setiap baris mentah menjadi objek proyek yang rapi.
-    // Baris header TIDAK ikut di sini karena gviz dengan tqx=out:json
-    // sudah otomatis memakai baris pertama sebagai definisi kolom (cols),
-    // sehingga "rows" yang dikembalikan sudah mulai dari baris data ke-2
-    // pada spreadsheet aslinya.
-    const projects = rows.map((row) => {
+    allProjects = rows.map((row) => {
       const cells = row.c || [];
       const getCell = (idx) => (cells[idx] && cells[idx].v !== null && cells[idx].v !== undefined)
         ? String(cells[idx].v).trim()
         : "";
-
       return {
-        no: getCell(0),                 // Kolom A: No
-        nama: getCell(1),                // Kolom B: Nama Project
-        jenis: getCell(2) || "Lainnya",  // Kolom C: Jenis Project
-        deskripsi: getCell(3),           // Kolom D: Deskripsi
-        gambarUrl: normalizeDriveImageUrl(getCell(4)), // Kolom E: Pendukung 1
-        linkUrl: normalizeExternalUrl(getCell(5)),     // Kolom F: Pendukung 2
+        no: getCell(0),
+        nama: getCell(1),
+        jenis: getCell(2) || "Lainnya",
+        deskripsi: getCell(3),
+        gambarUrl: normalizeDriveImageUrl(getCell(4)),
+        linkUrl: normalizeExternalUrl(getCell(5)),
       };
-    }).filter((p) => p.nama !== ""); // buang baris kosong
+    }).filter((p) => p.nama !== "");
 
-    if (projects.length === 0) {
+    if (allProjects.length === 0) {
       throw new Error("Data ditemukan tetapi tidak ada baris proyek yang valid (kolom Nama Project kosong).");
     }
 
-    renderChart(projects);
-    renderLegend(projects);
-    renderGrid(projects);
+    buildCategoryColorMap(allProjects);
+    renderSpectrumBar(allProjects);
+    renderChart(allProjects);
+    renderLegend(allProjects);
+    renderFilterTabs(allProjects);
+    renderGrid(allProjects, currentFilter);
+    startCycling(Object.keys(categoryColorMap));
 
     loadingEl.style.display = "none";
     errorEl.style.display = "none";
     mainEl.style.display = "block";
 
   } catch (err) {
+    clearTimeout(timeoutId);
     console.error("Gagal mengambil/parsing data Sheets:", err);
+
+    let message = err.message || "Terjadi kesalahan tidak diketahui.";
+    if (err.name === "AbortError") {
+      message = "Permintaan ke Google Sheets memakan waktu terlalu lama (>12 detik) dan dibatalkan. Kemungkinan koneksi lambat, atau permintaan diblokir oleh browser/ekstensi/CORS.";
+    } else if (err.message === "Failed to fetch" || err instanceof TypeError) {
+      message = "Gagal terhubung ke Google Sheets. Penyebab paling umum: (1) sheet belum di-share \"Anyone with the link\", (2) Spreadsheet ID salah, atau (3) file HTML ini dibuka langsung dari komputer (file://) dan diblokir browser — coba jalankan lewat local server atau hosting.";
+    }
+
+    // Pengaman ganda: apa pun yang terjadi, selalu sembunyikan loading
+    // sehingga tampilan TIDAK PERNAH macet selamanya di spinner.
     loadingEl.style.display = "none";
     mainEl.style.display = "none";
     errorEl.style.display = "block";
-    document.getElementById("errorMessage").textContent = err.message || "Terjadi kesalahan tidak diketahui.";
+    document.getElementById("errorMessage").textContent = message;
   }
 }
 
-/**
- * Memastikan URL gambar Google Drive dalam format direct-link yang
- * bisa dirender langsung oleh tag <img>. Jika kolom sudah kosong,
- * kembalikan placeholder.
- */
 function normalizeDriveImageUrl(rawValue) {
-  if (!rawValue) {
-    return "https://placehold.co/600x400/121a19/4fd8c4?text=No+Image&font=roboto-mono";
-  }
-  // Jika user menempel hanya ID Drive, atau path parsial "uc?export=view&id=...",
-  // tetap dilengkapi menjadi URL penuh.
+  if (!rawValue) return "https://placehold.co/600x400/191d29/5fd0d9?text=No+Image&font=roboto-mono";
   if (rawValue.startsWith("http")) return rawValue;
   if (rawValue.startsWith("uc?")) return `https://drive.google.com/${rawValue}`;
   return `https://drive.google.com/uc?export=view&id=${rawValue}`;
 }
 
-/**
- * Memastikan URL tautan luar (Pendukung 2) memiliki skema http/https
- * agar tombol "Lihat Dokumentasi" berfungsi dengan benar.
- */
 function normalizeExternalUrl(rawValue) {
   if (!rawValue) return "";
   if (rawValue.startsWith("http://") || rawValue.startsWith("https://")) return rawValue;
   return `https://${rawValue}`;
 }
 
-/** Memberi warna konsisten untuk setiap nama kategori. */
-function colorForCategory(name, index) {
-  return CHART_PALETTE[index % CHART_PALETTE.length];
+/* ---------------------- WARNA PER KATEGORI ---------------------- */
+function buildCategoryColorMap(projects) {
+  categoryColorMap = {};
+  let i = 0;
+  projects.forEach((p) => {
+    if (!(p.jenis in categoryColorMap)) {
+      categoryColorMap[p.jenis] = CATEGORY_PALETTE[i % CATEGORY_PALETTE.length];
+      i++;
+    }
+  });
 }
 
-/** Menghitung jumlah proyek per "Jenis Project". */
 function countByJenis(projects) {
   const counts = {};
-  projects.forEach((p) => {
-    counts[p.jenis] = (counts[p.jenis] || 0) + 1;
-  });
+  projects.forEach((p) => { counts[p.jenis] = (counts[p.jenis] || 0) + 1; });
   return counts;
 }
 
-/** Merender diagram donat berdasarkan proporsi Jenis Project. */
+/* ---------------------- BAR SPEKTRUM (elemen signature) ---------------------- */
+function renderSpectrumBar(projects) {
+  const counts = countByJenis(projects);
+  const total = projects.length;
+  const bar = document.getElementById("spectrumBar");
+  bar.innerHTML = Object.keys(counts).map((jenis) => {
+    const pct = ((counts[jenis] / total) * 100).toFixed(1);
+    return `<div class="spectrum-seg" style="flex-basis:${pct}%; background:${categoryColorMap[jenis]};" title="${escapeHtml(jenis)} — ${pct}%"></div>`;
+  }).join("");
+  document.getElementById("spectrumMeta").textContent = `${Object.keys(counts).length} disiplin · ${total} karya`;
+}
+
+/* ---------------------- DIAGRAM DONAT ---------------------- */
 function renderChart(projects) {
   const counts = countByJenis(projects);
   const labels = Object.keys(counts);
   const data = Object.values(counts);
-  const colors = labels.map((label, i) => colorForCategory(label, i));
+  const colors = labels.map((l) => categoryColorMap[l]);
 
   document.getElementById("totalProjectCount").textContent = projects.length;
 
@@ -752,90 +654,108 @@ function renderChart(projects) {
 
   jenisChartInstance = new Chart(ctx, {
     type: "doughnut",
-    data: {
-      labels: labels,
-      datasets: [{
-        data: data,
-        backgroundColor: colors,
-        borderColor: "#0a1211",
-        borderWidth: 3,
-        hoverOffset: 6,
-      }],
-    },
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: "#10131b", borderWidth: 3, hoverOffset: 8 }] },
     options: {
       responsive: true,
-      cutout: "72%",
+      cutout: "70%",
       plugins: {
-        legend: { display: false }, // legenda kustom dirender terpisah
-        tooltip: {
-          bodyFont: { family: "IBM Plex Mono" },
-          titleFont: { family: "IBM Plex Mono" },
-        },
+        legend: { display: false },
+        tooltip: { bodyFont: { family: "IBM Plex Mono" }, titleFont: { family: "IBM Plex Mono" } },
       },
     },
   });
 }
 
-/** Merender daftar legenda kategori beserta jumlah & persentase. */
+/* ---------------------- LEGENDA ---------------------- */
 function renderLegend(projects) {
   const counts = countByJenis(projects);
-  const labels = Object.keys(counts);
   const total = projects.length;
   const container = document.getElementById("legendList");
 
-  container.innerHTML = labels.map((label, i) => {
-    const value = counts[label];
+  container.innerHTML = Object.keys(counts).map((jenis) => {
+    const value = counts[jenis];
     const pct = ((value / total) * 100).toFixed(1);
-    const color = colorForCategory(label, i);
     return `
       <div class="legend-row">
-        <span class="name"><span class="dot" style="background:${color}"></span>${escapeHtml(label)}</span>
-        <span class="val">${value} proyek · ${pct}%</span>
-      </div>
-    `;
+        <span class="name"><span class="dot" style="background:${categoryColorMap[jenis]}"></span>${escapeHtml(jenis)}</span>
+        <span class="val">${value} karya · ${pct}%</span>
+      </div>`;
   }).join("");
 }
 
-/** Merender grid card portofolio. */
-function renderGrid(projects) {
-  const grid = document.getElementById("portfolioGrid");
-  document.getElementById("gridCountTag").textContent = `// ${projects.length} entri`;
+/* ---------------------- TAB FILTER DISIPLIN ---------------------- */
+function renderFilterTabs(projects) {
+  const counts = countByJenis(projects);
+  const container = document.getElementById("filterTabs");
+  const categories = Object.keys(counts);
 
-  grid.innerHTML = projects.map((p) => {
+  const tabs = [`<button class="filter-tab active" data-jenis="Semua" style="--tab-color:${'#d8ad5f'}">Semua (${projects.length})</button>`]
+    .concat(categories.map((jenis) =>
+      `<button class="filter-tab" data-jenis="${escapeHtml(jenis)}" style="--tab-color:${categoryColorMap[jenis]}">${escapeHtml(jenis)} (${counts[jenis]})</button>`
+    ));
+
+  container.innerHTML = tabs.join("");
+
+  container.querySelectorAll(".filter-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      container.querySelectorAll(".filter-tab").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentFilter = btn.dataset.jenis;
+      renderGrid(allProjects, currentFilter);
+    });
+  });
+}
+
+/* ---------------------- GRID KATALOG ---------------------- */
+function renderGrid(projects, filter) {
+  const grid = document.getElementById("portfolioGrid");
+  const filtered = (filter === "Semua") ? projects : projects.filter((p) => p.jenis === filter);
+
+  document.getElementById("gridCountTag").textContent = `// ${filtered.length} entri`;
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="col-12"><div class="empty-state">Tidak ada karya pada kategori ini.</div></div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map((p, idx) => {
     const hasLink = p.linkUrl !== "";
+    const accent = categoryColorMap[p.jenis] || "#d8ad5f";
+    const plateNo = p.no ? String(p.no).padStart(3, "0") : String(idx + 1).padStart(3, "0");
     return `
       <div class="col-md-6 col-lg-4">
-        <div class="proj-card">
+        <div class="proj-card" style="--card-accent:${accent}">
+          <div class="accent-bar"></div>
           <div class="img-frame">
-            <span class="serial-no">NO. ${escapeHtml(p.no || "-")}</span>
+            <span class="plate-no">PLATE No.${plateNo}</span>
             <img src="${escapeHtml(p.gambarUrl)}" alt="${escapeHtml(p.nama)}"
-                 onerror="this.src='https://placehold.co/600x400/121a19/4fd8c4?text=Gambar+Tidak+Tersedia&font=roboto-mono'">
+                 onerror="this.src='https://placehold.co/600x400/191d29/5fd0d9?text=Gambar+Tidak+Tersedia&font=roboto-mono'">
           </div>
           <div class="card-body-custom">
             <span class="badge-jenis">${escapeHtml(p.jenis)}</span>
             <h3>${escapeHtml(p.nama)}</h3>
             <p class="desc">${escapeHtml(p.deskripsi)}</p>
-            <a class="btn-scope ${hasLink ? "" : "disabled"}"
-               href="${hasLink ? escapeHtml(p.linkUrl) : "#"}"
-               target="_blank" rel="noopener noreferrer">
-              ${hasLink ? "Lihat Dokumentasi →" : "Tautan tidak tersedia"}
+            <a class="btn-detail ${hasLink ? "" : "disabled"}"
+               href="${hasLink ? escapeHtml(p.linkUrl) : "#"}" target="_blank" rel="noopener noreferrer">
+              ${hasLink ? "Lihat Detail →" : "Tautan tidak tersedia"}
             </a>
           </div>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join("");
 }
 
-/** Utilitas kecil agar konten dari Sheets tidak merusak HTML (XSS-safe). */
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
 }
 
-// Mulai proses fetch begitu halaman dimuat.
-document.addEventListener("DOMContentLoaded", fetchSheetData);
+// Mulai cycling default sambil menunggu data, lalu fetch dari Sheets.
+document.addEventListener("DOMContentLoaded", () => {
+  startCycling(FALLBACK_ROLES);
+  fetchSheetData();
+});
 </script>
 
 </body>
